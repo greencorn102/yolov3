@@ -428,7 +428,7 @@ class mb3SE(nn.Module):
         )
     def forward(self, x):
         return x * self.se(x)
-
+"""
 class mb3Block(nn.Module):
     def __init__(self, c1, cexp, c2, k=1, s=1, se=None, act='H'): #chin, ch_expansion, chout, stride, se, activation
         super(mb3Block,self).__init__()
@@ -459,7 +459,8 @@ class mb3Block(nn.Module):
             out = self.sem(out)
         out = out + self.shortcut(x) if self.stride==1 else out
         return out
-      
+        
+"""   
       
       
       
