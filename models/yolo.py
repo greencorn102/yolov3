@@ -285,8 +285,20 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             c2 = ch[f] * args[0] ** 2
         elif m is Expand:
             c2 = ch[f] // args[0] ** 2
+        elif m is CBH:
+            c1=ch[f if f<0 else f+1]
+            c2=args[0]
+            args=[c1,c2,*args[1:]]
+            
+        elif m is mb3Block:
+            c1=ch[f if f<0 else f+1]
+            c2=args[1]
+            args=[c1,*args]
         else:
             c2 = ch[f]
+            
+        if m is mb3Block:
+            m_=m(*args)
 
         m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
         t = str(m)[8:-2].replace('__main__.', '')  # module type
