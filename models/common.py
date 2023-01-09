@@ -397,6 +397,72 @@ class DetectMultiBackend(nn.Module):
         return (y, []) if val else y
 
 
+class hswish(nn.Module):
+    def forward(self, x):
+        out = x * nn.functional.relu6(x + 3, inplace=True) / 6
+        return out
+
+class hsigmoid(nn.Module):
+    def forward(self, x):
+        out = nn.functional.relu6(x + 3, inplace=True) / 6
+        return out
+
+class CBH(nn.Sequential):
+    def __init__(self, c1, c2, k=1, s=1):  # ch_in, ch_out, kernel, stride, padding, groups
+        super(CBH, self).__init__()
+        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, None), bias=False)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = hswish()
+    def forward(self, x):
+        return self.act(self.bn(self.conv(x)))
+
+class mb3SE(nn.Module):
+    def __init__(self, in_size, reduction=4):
+        super(mb3SE, self).__init__()
+        self.se = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(in_size, in_size // reduction, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_size // reduction, in_size, kernel_size=1, stride=1, padding=0, bias=False),
+            hsigmoid()
+        )
+    def forward(self, x):
+        return x * self.se(x)
+
+class mb3Block(nn.Module):
+    def __init__(self, c1, cexp, c2, k=1, s=1, se=None, act='H'): #chin, ch_expansion, chout, stride, se, activation
+        super(mb3Block,self).__init__()
+        self.se=True if se=='S' else False
+        if self.se:
+            self.sem=mb3SE(c2)
+        self.stride=s
+        self.conv1 = nn.Conv2d(c1, cexp, kernel_size=1, stride=1, padding=0, bias=False)
+        self.bn1 = nn.BatchNorm2d(cexp)
+        self.act1 = hswish() if act=='H' else nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(cexp, cexp, kernel_size=k, stride=s, padding=k//2, groups=cexp, bias=False)
+        self.bn2 = nn.BatchNorm2d(cexp)
+        self.act2 = hswish() if act=='H' else nn.ReLU(inplace=True)
+        self.conv3 = nn.Conv2d(cexp, c2, kernel_size=1, stride=1, padding=0, bias=False)
+        self.bn3 = nn.BatchNorm2d(c2)
+
+        self.shortcut = nn.Sequential()
+        if s == 1 and c1 != c2:
+            self.shortcut = nn.Sequential(
+                    nn.Conv2d(c1, c2, kernel_size=1, stride=1, padding=0, bias=False),
+                    nn.BatchNorm2d(c2))
+
+    def forward(self, x):
+        out = self.act1(self.bn1(self.conv1(x)))
+        out = self.act2(self.bn2(self.conv2(out)))
+        out = self.bn3(self.conv3(out))
+        if self.se:
+            out = self.sem(out)
+        out = out + self.shortcut(x) if self.stride==1 else out
+        return out
+      
+      
+      
+      
 class AutoShape(nn.Module):
     #  input-robust model wrapper for passing cv2/np/PIL/torch inputs. Includes preprocessing, inference and NMS
     conf = 0.25  # NMS confidence threshold
